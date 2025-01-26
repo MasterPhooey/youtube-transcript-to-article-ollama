@@ -4,14 +4,16 @@ import json
 import requests
 from bs4 import BeautifulSoup
 from flask import Flask, request, jsonify, render_template
-import openai  # Import OpenAI library
+import ollama  # Import Ollama library
 from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound  # For fetching YouTube transcripts
 import paho.mqtt.client as mqtt  # Import MQTT library
+import requests
 
 app = Flask(__name__)  # Initialize Flask application
 
-# Initialize OpenAI client with the API key from environment variable
-openai.api_key = os.getenv("OPENAI_API_KEY")  # Get OpenAI API key
+# Ollama related environment variables
+OLLAMA_SERVER = os.getenv("OLLAMA_SERVER", "http://localhost:11434")  # Default Ollama server address
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama2")  # Default Ollama model
 
 # MQTT related environment variables
 MQTT_ACTIVE = os.getenv("MQTT_ACTIVE", "false").lower() == "true"
@@ -25,11 +27,14 @@ MQTT_CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "youtube_article_generator")
 LAST_MESSAGE_TOPIC = f"{MQTT_TOPIC_PUB}/last_message"  # Topic for the last outgoing message
 AVAILABILITY_TOPIC = f"{MQTT_TOPIC_PUB}/availability"  # Topic for the availability status
 
+
 def extract_video_id(url_or_id):
     """
     Extracts the video ID from a YouTube URL or returns the input if it's already an ID.
     """
-    video_id_match = re.match(r"(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]{11})", url_or_id)
+    video_id_match = re.match(
+        r"(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]{11})", url_or_id
+    )
     return video_id_match.group(1) if video_id_match else url_or_id  # Return video ID
 
 
@@ -82,51 +87,56 @@ def get_transcript(video_id, target_lang=None):
     text = " ".join([t['text'] for t in transcript])
     return text  # Return transcript text
 
-def chat_gpt(prompt):
+
+def chat_ollama(prompt):
     """
-    Sends a prompt to the OpenAI Chat API and returns the response.
+    Sends a prompt to the Ollama API and returns the response.
     """
-    prompt_background = (f"# IDENTITY and PURPOSE\n"
-                        f"You extract surprising, insightful, and interesting information from text content. You are interested in insights related to the purpose and meaning of life, human flourishing, the role of technology in the future of humanity, artificial intelligence and its affect on humans, memes, learning, reading, books, continuous improvement, and similar topics.\n"
-                        f"Take a step back and think step-by-step about how to achieve the best possible results by following the steps below.\n\n"
-                        f"# STEPS\n\n"
-                        f"- Extract a summary of the content in 25 words, including who is presenting and the content being discussed into a section called SUMMARY.\n"
-                        f"- Extract 20 to 50 of the most surprising, insightful, and/or interesting ideas from the input in a section called IDEAS:. If there are less than 50 then collect all of them. Make sure you extract at least 20.\n"
-                        f"- Extract 10 to 20 of the best insights from the input and from a combination of the raw input and the IDEAS above into a section called INSIGHTS. These INSIGHTS should be fewer, more refined, more insightful, and more abstracted versions of the best ideas in the content. \n"
-                        f"- Extract 15 to 30 of the most surprising, insightful, and/or interesting quotes from the input into a section called QUOTES:. Use the exact quote text from the input.\n"
-                        f"- Extract 15 to 30 of the most practical and useful personal habits of the speakers, or mentioned by the speakers, in the content into a section called HABITS. Examples include but aren't limited to: sleep schedule, reading habits, things they always do, things they always avoid, productivity tips, diet, exercise, etc.\n"
-                        f"- Extract 15 to 30 of the most surprising, insightful, and/or interesting valid facts about the greater world that were mentioned in the content into a section called FACTS:.\n"
-                        f"- Extract all mentions of writing, art, tools, projects and other sources of inspiration mentioned by the speakers into a section called REFERENCES. This should include any and all references to something that the speaker mentioned.\n"
-                        f"- Extract the most potent takeaway and recommendation into a section called ONE-SENTENCE TAKEAWAY. This should be a 15-word sentence that captures the most important essence of the content.\n"
-                        f"- Extract the 15 to 30 of the most surprising, insightful, and/or interesting recommendations that can be collected from the content into a section called RECOMMENDATIONS.\n\n"
-                        f"# OUTPUT INSTRUCTIONS\n\n"
-                        f"- Only output Markdown.\n"
-                        f"- Write the IDEAS bullets as exactly 15 words.\n"
-                        f"- Write the RECOMMENDATIONS bullets as exactly 15 words.\n"
-                        f"- Write the HABITS bullets as exactly 15 words.\n"
-                        f"- Write the FACTS bullets as exactly 15 words.\n"
-                        f"- Write the INSIGHTS bullets as exactly 15 words.\n"
-                        f"- Extract at least 25 IDEAS from the content.\n"
-                        f"- Extract at least 10 INSIGHTS from the content.\n"
-                        f"- Extract at least 20 items for the other output sections.\n"
-                        f"- Do not give warnings or notes; only output the requested sections.\n"
-                        f"- You use bulleted lists for output, not numbered lists.\n"
-                        f"- Do not repeat ideas, quotes, facts, or resources.\n"
-                        f"- Do not start items with the same opening words.\n"
-                        f"- Ensure you follow ALL these instructions when creating your output.\n\n")
+    prompt_background = (
+        f"# IDENTITY and PURPOSE\n"
+        f"You extract surprising, insightful, and interesting information from text content. You are interested in insights related to the purpose and meaning of life, human flourishing, the role of technology in the future of humanity, artificial intelligence and its affect on humans, memes, learning, reading, books, continuous improvement, and similar topics.\n"
+        f"Take a step back and think step-by-step about how to achieve the best possible results by following the steps below.\n\n"
+        f"# STEPS\n\n"
+        f"- Extract a summary of the content in 25 words, including who is presenting and the content being discussed into a section called SUMMARY.\n"
+        f"- Extract 20 to 50 of the most surprising, insightful, and/or interesting ideas from the input in a section called IDEAS:. If there are less than 50 then collect all of them. Make sure you extract at least 20.\n"
+        f"- Extract 10 to 20 of the best insights from the input and from a combination of the raw input and the IDEAS above into a section called INSIGHTS. These INSIGHTS should be fewer, more refined, more insightful, and more abstracted versions of the best ideas in the content. \n"
+        f"- Extract 15 to 30 of the most surprising, insightful, and/or interesting quotes from the input into a section called QUOTES:. Use the exact quote text from the input.\n"
+        f"- Extract 15 to 30 of the most practical and useful personal habits of the speakers, or mentioned by the speakers, in the content into a section called HABITS. Examples include but aren't limited to: sleep schedule, reading habits, things they always do, things they always avoid, productivity tips, diet, exercise, etc.\n"
+        f"- Extract 15 to 30 of the most surprising, insightful, and/or interesting valid facts about the greater world that were mentioned in the content into a section called FACTS:.\n"
+        f"- Extract all mentions of writing, art, tools, projects and other sources of inspiration mentioned by the speakers into a section called REFERENCES. This should include any and all references to something that the speaker mentioned.\n"
+        f"- Extract the most potent takeaway and recommendation into a section called ONE-SENTENCE TAKEAWAY. This should be a 15-word sentence that captures the most important essence of the content.\n"
+        f"- Extract the 15 to 30 of the most surprising, insightful, and/or interesting recommendations that can be collected from the content into a section called RECOMMENDATIONS.\n\n"
+        f"# OUTPUT INSTRUCTIONS\n\n"
+        f"- Only output Markdown.\n"
+        f"- Write the IDEAS bullets as exactly 15 words.\n"
+        f"- Write the RECOMMENDATIONS bullets as exactly 15 words.\n"
+        f"- Write the HABITS bullets as exactly 15 words.\n"
+        f"- Write the FACTS bullets as exactly 15 words.\n"
+        f"- Write the INSIGHTS bullets as exactly 15 words.\n"
+        f"- Extract at least 25 IDEAS from the content.\n"
+        f"- Extract at least 10 INSIGHTS from the content.\n"
+        f"- Extract at least 20 items for the other output sections.\n"
+        f"- Do not give warnings or notes; only output the requested sections.\n"
+        f"- You use bulleted lists for output, not numbered lists.\n"
+        f"- Do not repeat ideas, quotes, facts, or resources.\n"
+        f"- Do not start items with the same opening words.\n"
+        f"- Ensure you follow ALL these instructions when creating your output.\n\n"
+    )
 
     try:
-        # Call the OpenAI API with the prompt
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",  # Select model
-            messages=[
-                {"role": "system", "content": prompt_background},  # Assistant context
-                {"role": "user", "content": prompt}  # User prompt
-            ]
+        # Call the Ollama API manually using requests
+        response = requests.post(
+            f"{OLLAMA_SERVER}/api/generate",  # Use the Ollama server address
+            json={
+                "model": OLLAMA_MODEL,  # Use the model specified in the environment variable
+                "prompt": prompt_background + prompt,
+                "stream": False  # Disable streaming for simplicity
+            }
         )
-        return response['choices'][0]['message']['content'].strip()  # Return AI response
+        response.raise_for_status()  # Raise an error for bad status codes
+        return response.json()["response"].strip()  # Return the generated response
     except Exception as e:
-        print(f"Error calling OpenAI API: {e}")  # Print error
+        print(f"Error calling Ollama API: {e}")  # Print error
         return "Error processing your request."  # Return error message
 
 def generate_article(transcript, detail_level="summary", target_lang=None):
@@ -139,7 +149,8 @@ def generate_article(transcript, detail_level="summary", target_lang=None):
     if target_lang:
         prompt += f"\n\nWrite the article in {target_lang}."  # Add language preference if provided
 
-    return chat_gpt(prompt)  # Get generated article from chat_gpt function
+    return chat_ollama(prompt)  # Get generated article from chat_ollama function
+
 
 @app.route('/api/generate', methods=['POST'])
 def generate():
@@ -153,33 +164,35 @@ def generate():
 
     video_id = extract_video_id(video_input)  # Extract video ID
     transcript = get_transcript(video_id, target_lang)  # Fetch transcript for the video
-    article = generate_article(transcript, detail_level, target_lang)  # Generate article  
-    video_info = get_video_info_scrape(video_id) # Fetch video title and channel name via scraping
+    article = generate_article(transcript, detail_level, target_lang)  # Generate article
+    video_info = get_video_info_scrape(video_id)  # Fetch video title and channel name via scraping
 
     return jsonify({
         "article": article,
         "video_id": video_id,
         "video_title": video_info["title"]
     })
-    
+
+
 @app.route('/api/transcript', methods=['POST'])
 def transcript():
     """
-    API endpoint for get the plain transcript
+    API endpoint for getting the plain transcript.
     """
     data = request.json  # Get JSON data from the request
     video_input = data.get('video_id')  # Extract video ID from input
     target_lang = data.get('target_lang', None)  # Get target language, if provided
 
     video_id = extract_video_id(video_input)  # Extract video ID
-    transcript = get_transcript(video_id, target_lang)  # Fetch transcript for the video  
-    video_info = get_video_info_scrape(video_id) # Fetch video title and channel name via scraping
+    transcript = get_transcript(video_id, target_lang)  # Fetch transcript for the video
+    video_info = get_video_info_scrape(video_id)  # Fetch video title and channel name via scraping
 
     return jsonify({
         "transcript": transcript,
         "video_id": video_id,
         "video_title": video_info["title"]
-    })  
+    })
+
 
 @app.route('/')
 def home():
@@ -187,6 +200,7 @@ def home():
     Renders the home page.
     """
     return render_template('index.html')  # Render index.html template
+
 
 def on_connect(client, userdata, flags, reason_code, properties):
     """
@@ -196,11 +210,13 @@ def on_connect(client, userdata, flags, reason_code, properties):
     client.publish(AVAILABILITY_TOPIC, "online", qos=1, retain=True)  # Set the status to online
     client.subscribe(MQTT_TOPIC_SUB)  # Subscribe to the input topic
 
+
 def on_disconnect(client, userdata, rc):
     """
     Callback for when the client disconnects from the broker.
     """
     client.publish(AVAILABILITY_TOPIC, "offline", qos=1, retain=True)  # Set the status to offline
+
 
 def on_message(client, userdata, msg):
     """
@@ -227,6 +243,7 @@ def on_message(client, userdata, msg):
         error_message = f"Error processing message: {e}"
         print(error_message)
         client.publish(LAST_MESSAGE_TOPIC, json.dumps({"error": error_message}))  # Publish error message
+
 
 def setup_mqtt():
     """
@@ -284,6 +301,7 @@ def setup_mqtt():
     client.publish(last_message_discovery_topic, json.dumps(last_message_discovery_payload), qos=1, retain=True)
 
     client.loop_start()  # Start the MQTT loop
+
 
 if __name__ == '__main__':
     if MQTT_ACTIVE:
