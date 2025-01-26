@@ -131,9 +131,11 @@ This application is also available on unRAID as `youtube-transcript-to-article`.
 </s>
 
 2. **Set up your environment variables:**
+
+   ```bash
    OLLAMA_SERVER=
    OLLAMA_MODEL=
-    
+   ``` 
 3. **Build the Docker image:**
 
    ```bash
