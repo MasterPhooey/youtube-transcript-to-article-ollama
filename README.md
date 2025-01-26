@@ -1,7 +1,7 @@
 
 # YouTube Transcript to Article
 
-**YouTube Transcript to Article** is a Docker-based Python project that provides an API for converting YouTube transcripts into professional articles using OpenAI's ChatGPT. This tool automates the creation of summaries or detailed articles from YouTube video content, making it easy to generate professional write-ups from video transcripts.
+**YouTube Transcript to Article** is a Docker-based Python project that provides an API for converting YouTube transcripts into professional articles using Ollama. This tool automates the creation of summaries or detailed articles from YouTube video content, making it easy to generate professional write-ups from video transcripts.
 
 ## Features
 
@@ -89,23 +89,23 @@ services:
 
 The Docker image for this project is available on Docker Hub:
 
-- **Docker Hub:** `patrickstigler/youtube-transcript-to-article`
+- **Docker Hub:** `masterphooey/youtube-transcript-to-article-ollama`
 
 To pull and run the Docker image, use the following commands:
 
 ```bash
-docker pull patrickstigler/youtube-transcript-to-article
-docker run -p 5000:5000 patrickstigler/youtube-transcript-to-article
+docker pull masterphooey/youtube-transcript-to-article-ollama
+docker run -p 5000:5000 masterphooey/youtube-transcript-to-article-ollama
 ```
 
-### unRAID Installation
+<s>### unRAID Installation
 
 This application is also available on unRAID as `youtube-transcript-to-article`. To install it on unRAID:
 
 1. Open the unRAID web interface.
 2. Navigate to the **Apps** tab.
 3. Search for `youtube-transcript-to-article`.
-4. Click **Install** and follow the prompts to set up the application.
+4. Click **Install** and follow the prompts to set up the application.</s>
 
 ## Prerequisites
 
@@ -117,28 +117,29 @@ This application is also available on unRAID as `youtube-transcript-to-article`.
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/yourusername/youtube-transcript-to-article.git
-   cd youtube-transcript-to-article
+   git clone https://github.com/MasterPhooey/youtube-transcript-to-article-ollama.git
+   cd youtube-transcript-to-article-ollama
    ```
-
+<s>
 2. **Set up your environment variables:**
 
    Ensure your OpenAI API key is set in your environment:
 
    ```bash
    export OPENAI_API_KEY=your_openai_api_key
-   ```
+   ``` 
+</s>
 
 3. **Build the Docker image:**
 
    ```bash
-   docker build -t youtube-transcript-to-article .
+   docker build -t youtube-transcript-to-article-ollama .
    ```
 
 4. **Run the Docker container:**
 
    ```bash
-   docker run -p 5000:5000 youtube-transcript-to-article
+   docker run -p 5000:5000 youtube-transcript-to-article-ollama
    ```
 
 ## Usage
