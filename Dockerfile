@@ -3,7 +3,6 @@ FROM python:3.10-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV OPENAI_API_KEY=your_openai_api_key
 
 # Set working directory
 WORKDIR /app
