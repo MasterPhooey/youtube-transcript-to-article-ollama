@@ -1,5 +1,5 @@
 
-# YouTube Transcript to Article
+# YouTube Transcript to Article with Ollama
 
 **YouTube Transcript to Article** is a Docker-based Python project that provides an API for converting YouTube transcripts into professional articles using Ollama. This tool automates the creation of summaries or detailed articles from YouTube video content, making it easy to generate professional write-ups from video transcripts.
 
