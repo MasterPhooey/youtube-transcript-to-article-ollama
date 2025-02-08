@@ -130,7 +130,8 @@ def chat_ollama(prompt):
             json={
                 "model": OLLAMA_MODEL,  # Use the model specified in the environment variable
                 "prompt": prompt_background + prompt,
-                "stream": False  # Disable streaming for simplicity
+                stream=False,
+                keep_alive=-1
             }
         )
         response.raise_for_status()  # Raise an error for bad status codes
